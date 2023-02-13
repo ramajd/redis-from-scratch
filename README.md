@@ -9,7 +9,7 @@ re-implement the  Redis from scratch. follow the [Build Your Own Redis with C/C+
 1. [x] Introduction
 2. [x] Introduction to sockets
 3. [x] Hello Server/Client
-4. [ ] Protocol Parsing
+4. [x] Protocol Parsing
 5. [ ] The Event Loop and Nonblocking IO
 6. [ ] The Event Loop Implementation
 7. [ ] Basic Server: get, set, del

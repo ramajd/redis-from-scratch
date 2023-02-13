@@ -1,41 +1,56 @@
 /**
- * Simple server implementtion
- * Time-stamp: <2023-02-13 14:41:46 by Reza Majd (reza-lenovo)>
+ * Simple server implementation
+ * Time-stamp: <2023-02-13 16:42:09 by Reza Majd (reza-lenovo)>
  */
 
-#include <stdint.h>
-#include <stdlib.h>
-#include <stdbool.h>
-#include <string.h>
-#include <stdio.h>
 #include <errno.h>
-#include <sys/types.h>
+#include <stdio.h>
+#include <string.h>
+#include <stdint.h>
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
-#include <netinet/ip.h>
 
-static void msg(const char *msg) {
-  fprintf(stderr, "%s\n", msg);
-}
+#include "common.h"
 
-static void die(const char *msg) {
-  int err = errno;
-  fprintf(stderr, "[%d] %s\n", err, msg);
-  abort();
-}
 
-static void do_something(int connfd) {
-  char read_buffer[64];
-  ssize_t n = read(connfd, read_buffer, sizeof(read_buffer) - 1);
-  if (n < 0) {
-    msg("read() error");
-    return;
+static int one_request(int connfd) {
+  char read_buffer[4 + k_max_msg + 1];
+  errno = 0;
+  int32_t err = read_all(connfd, read_buffer, 4);
+  if (err) {
+    if (errno == 0) {
+      msg("EOF");
+    } else {
+      msg("read() error");
+    }
+    return err;
   }
-  printf("client says: %s\n", read_buffer);
 
-  char write_buffer[] = "world";
-  write(connfd, write_buffer, strlen(write_buffer)); 
+  uint32_t len = 0;
+  memcpy(&len, read_buffer, 4);
+  if (len > k_max_msg) {
+    msg("too long");
+    return -1;
+  }
+
+  err = read_all(connfd, &read_buffer[4], len);
+  if (err) {
+    msg("read() error");
+    return err;
+  }
+
+  // do something
+  read_buffer[4 + len] = '\0';
+  printf("client says: %s\n", &read_buffer[4]);
+
+  // reply using same protocol
+  const char reply[] = "world";
+  char write_buffer[4 + sizeof(reply)];
+  len = (uint32_t)strlen(reply);
+  memcpy(write_buffer, &len, 4);
+  memcpy(&write_buffer[4], reply, len);
+  return write_all(connfd, write_buffer, 4 + len);
 }
 
 int main() {
@@ -48,7 +63,7 @@ int main() {
   int val = 1;
   setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &val, sizeof(val));
 
-  
+
   struct sockaddr_in addr = {};
   addr.sin_family = AF_INET;
   addr.sin_port = ntohs(1234);
@@ -71,7 +86,12 @@ int main() {
       continue; // Error
     }
 
-    do_something(connfd);
+    while (true) {
+      int32_t err = one_request(connfd);
+      if (err) {
+        break;
+      }
+    }
     close(connfd);
   }  
 }
